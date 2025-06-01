@@ -18,10 +18,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   async function fetchData() {
     try {
       setLoading(true);
@@ -33,7 +29,7 @@ function App() {
         axios.get('/api/profiles'),
         axios.get('/api/firewall/expired-list')
       ]);
-
+      console.log('queuesRes.data', queuesRes.data)
       const secrets = secretsRes.data;
       const queues = queuesRes.data;
       const allProfiles = profilesRes.data;
@@ -50,6 +46,10 @@ function App() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   function processExpiredIPs(expiredText) {
     const expiredIPs = [];
@@ -209,13 +209,6 @@ function App() {
     } catch (err) {
       alert('Error: ' + (err.response?.data?.message || err.message));
     }
-  }
-
-  function getUnit(rate) {
-    if (!rate) return 'M';
-    const rateUpper = rate.toUpperCase();
-    return rateUpper.includes('G') ? 'G' :
-           rateUpper.includes('K') ? 'K' : 'M';
   }
 
   if (loading) return <div className="container mt-3">Loading...</div>;
