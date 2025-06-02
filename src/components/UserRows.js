@@ -17,14 +17,17 @@ function UserRows({
     !isPPPoE ? user.download.replace(/[^\d]/g, '') : ''
   );
   const [downloadUnit, setDownloadUnit] = useState(
-    !isPPPoE ? 'M' : 'M'  // default to 'M' without getUnit
+    !isPPPoE ? 'M' : 'M'
   );
   const [uploadValue, setUploadValue] = useState(
     !isPPPoE ? user.upload.replace(/[^\d]/g, '') : ''
   );
   const [uploadUnit, setUploadUnit] = useState(
-    !isPPPoE ? 'M' : 'M'  // default to 'M' without getUnit
+    !isPPPoE ? 'M' : 'M'
   );
+
+  // New: state for PPPoE profile select
+  const [selectedProfile, setSelectedProfile] = useState(user.profile);
 
   const handleSaveQueueRate = () => {
     if (!downloadValue || (uploadVisible && !uploadValue)) {
@@ -32,6 +35,11 @@ function UserRows({
       return;
     }
     saveQueueRate(user.name, downloadValue, downloadUnit, uploadValue, uploadUnit);
+  };
+
+  // New: function to save PPPoE profile
+  const handleSaveProfile = () => {
+    updateProfile(user.name, selectedProfile);
   };
 
   return (
@@ -44,7 +52,8 @@ function UserRows({
           <select
             id={`profile-select-${user.name}`}
             className="form-select form-select-sm"
-            defaultValue={user.profile}
+            value={selectedProfile}  // controlled
+            onChange={(e) => setSelectedProfile(e.target.value)}
           >
             {profiles.map((profile) => (
               <option key={profile} value={profile}>
@@ -120,7 +129,7 @@ function UserRows({
             <>
               <button
                 className="btn btn-sm btn-primary"
-                onClick={() => updateProfile(user.name)}
+                onClick={handleSaveProfile}  // use new handler
               >
                 Save Profile
               </button>
