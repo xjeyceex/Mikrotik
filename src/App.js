@@ -1,57 +1,40 @@
-// src/App.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
 import UserRows from './components/UserRows';
+import ConfirmationModal from './components/ConfirmationModal';
 
-// Helper function to wrap window.confirm with ESLint disable for no-restricted-globals
-function confirmAction(message) {
-  // eslint-disable-next-line no-restricted-globals
-  return confirm(message);
-}
+// Helper functions that don't depend on component scope can be moved outside
+const ipToInt = (ip) => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0);
 
-function App() {
+const App = () => {
   const [users, setUsers] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadVisible, setUploadVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    title: '',
+    message: '',
+    onConfirm: null,
+    onCancel: null
+  });
 
-  async function fetchData() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [secretsRes, queuesRes, profilesRes, expiredRes] = await Promise.all([
-        axios.get('/api/secrets'),
-        axios.get('/api/queues'),
-        axios.get('/api/profiles'),
-        axios.get('/api/firewall/expired-list')
-      ]);
-      console.log('queuesRes.data', queuesRes.data)
-      const secrets = secretsRes.data;
-      const queues = queuesRes.data;
-      const allProfiles = profilesRes.data;
-      const expiredText = expiredRes.data;
-
-      const expiredIPs = processExpiredIPs(expiredText);
-      const combinedUsers = combineUsers(secrets, queues, expiredIPs);
-
-      setUsers(combinedUsers);
-      setProfiles(allProfiles);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    fetchData();
+  // Memoized helper functions
+  const isIpInRange = useCallback((ip, start, end) => {
+    const ipInt = ipToInt(ip);
+    return ipInt >= ipToInt(start) && ipInt <= ipToInt(end);
   }, []);
 
-  function processExpiredIPs(expiredText) {
+  const isIpInCidr = useCallback((ip, cidr) => {
+    const [range, bits] = cidr.split('/');
+    const mask = ~(2 ** (32 - parseInt(bits, 10)) - 1);
+    return (ipToInt(ip) & mask) === (ipToInt(range) & mask);
+  }, []);
+
+  const processExpiredIPs = useCallback((expiredText) => {
     const expiredIPs = [];
     const regex = /\b\d{1,3}(?:\.\d{1,3}){3}(?:-\d{1,3}(?:\.\d{1,3}){3})?|\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/g;
     const matches = expiredText.match(regex) || [];
@@ -66,26 +49,10 @@ function App() {
         expiredIPs.push({ type: 'ip', value: entry });
       }
     }
-
     return expiredIPs;
-  }
+  }, []);
 
-  function ipToInt(ip) {
-    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0);
-  }
-
-  function isIpInRange(ip, start, end) {
-    const ipInt = ipToInt(ip);
-    return ipInt >= ipToInt(start) && ipInt <= ipToInt(end);
-  }
-
-  function isIpInCidr(ip, cidr) {
-    const [range, bits] = cidr.split('/');
-    const mask = ~(2 ** (32 - parseInt(bits, 10)) - 1);
-    return (ipToInt(ip) & mask) === (ipToInt(range) & mask);
-  }
-
-  function combineUsers(secrets, queues, expiredIPs) {
+  const combineUsers = useCallback((secrets, queues, expiredIPs) => {
     const combined = [
       ...secrets.map(s => ({ ...s, type: 'pppoe' })),
       ...queues.map(q => ({ ...q, type: 'queue' }))
@@ -107,22 +74,57 @@ function App() {
           }
         }
       }
-
       return { ...user, expired };
     });
-  }
+  }, [isIpInRange, isIpInCidr]);
 
-  function filterUsers() {
-    if (!searchTerm) return users;
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-    return users.filter(user =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.target && user.target.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (user.profile && user.profile.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-  }
+      const [secretsRes, queuesRes, profilesRes, expiredRes] = await Promise.all([
+        axios.get('/api/secrets'),
+        axios.get('/api/queues'),
+        axios.get('/api/profiles'),
+        axios.get('/api/firewall/expired-list')
+      ]);
 
-  async function updateProfile(name) {
+      const secrets = secretsRes.data;
+      const queues = queuesRes.data;
+      const allProfiles = profilesRes.data;
+      const expiredText = expiredRes.data;
+
+      const expiredIPs = processExpiredIPs(expiredText);
+      const combinedUsers = combineUsers(secrets, queues, expiredIPs);
+
+      setUsers(combinedUsers);
+      setProfiles(allProfiles);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [processExpiredIPs, combineUsers]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const showConfirmation = (title, message, onConfirm, onCancel = () => setShowModal(false)) => {
+    setModalConfig({
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setShowModal(false);
+      },
+      onCancel
+    });
+    setShowModal(true);
+  };
+
+  const updateProfile = async (name) => {
     const select = document.getElementById(`profile-select-${name}`);
     const newProfile = select.value;
 
@@ -131,33 +133,33 @@ function App() {
         name,
         profile: newProfile
       });
-
       alert(res.data.message);
       fetchData();
     } catch (err) {
       alert('Error: ' + (err.response?.data?.message || err.message));
     }
-  }
+  };
 
-  async function markPppoeAsExpired(name) {
-    if (!confirmAction(`Are you sure you want to mark ${name} as expired? This will set their profile to "expired".`)) {
-      return;
-    }
+  const markPppoeAsExpired = (name) => {
+    showConfirmation(
+      'Confirm Action',
+      `Are you sure you want to mark ${name} as expired?`,
+      async () => {
+        try {
+          const res = await axios.post('/api/secrets/update-profile', {
+            name,
+            profile: 'expired'
+          });
+          alert(res.data.message);
+          fetchData();
+        } catch (err) {
+          alert('Error: ' + (err.response?.data?.message || err.message));
+        }
+      }
+    );
+  };
 
-    try {
-      const res = await axios.post('/api/secrets/update-profile', {
-        name,
-        profile: 'expired'
-      });
-
-      alert(res.data.message);
-      fetchData();
-    } catch (err) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
-    }
-  }
-
-  async function saveQueueRate(name, downloadValue, downloadUnit, uploadValue, uploadUnit) {
+  const saveQueueRate = async (name, downloadValue, downloadUnit, uploadValue, uploadUnit) => {
     const download = downloadValue + downloadUnit;
     const upload = uploadValue + uploadUnit;
 
@@ -167,49 +169,59 @@ function App() {
         download,
         upload
       });
-
       alert(res.data.message);
       fetchData();
     } catch (err) {
       alert('Error: ' + (err.response?.data?.message || err.message));
     }
-  }
+  };
 
-  async function addExpiredFirewallRule(name, ipAddress) {
-    if (!confirmAction(`Are you sure you want to add firewall rule "EXPIRED" for ${name} (${ipAddress})?`)) {
-      return;
-    }
+  const addExpiredFirewallRule = (name, ipAddress) => {
+    showConfirmation(
+      'Confirm Action',
+      `Add firewall rule for ${name} (${ipAddress})?`,
+      async () => {
+        try {
+          const res = await axios.post('/api/firewall/add-expired', {
+            name,
+            ipAddress
+          });
+          alert(res.data.message);
+          fetchData();
+        } catch (err) {
+          alert('Error: ' + (err.response?.data?.message || err.message));
+        }
+      }
+    );
+  };
 
-    try {
-      const res = await axios.post('/api/firewall/add-expired', {
-        name,
-        ipAddress
-      });
+  const removeExpiredFirewallRule = (name, ipAddress) => {
+    showConfirmation(
+      'Confirm Action',
+      `Remove firewall rule for ${name} (${ipAddress})?`,
+      async () => {
+        try {
+          const res = await axios.post('/api/firewall/remove-expired', {
+            name,
+            ipAddress
+          });
+          alert(res.data.message);
+          fetchData();
+        } catch (err) {
+          alert('Error: ' + (err.response?.data?.message || err.message));
+        }
+      }
+    );
+  };
 
-      alert(res.data.message);
-      fetchData();
-    } catch (err) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
-    }
-  }
-
-  async function removeExpiredFirewallRule(name, ipAddress) {
-    if (!confirmAction(`Are you sure you want to remove the "EXPIRED" firewall rule for ${name} (${ipAddress})?`)) {
-      return;
-    }
-
-    try {
-      const res = await axios.post('/api/firewall/remove-expired', {
-        name,
-        ipAddress
-      });
-
-      alert(res.data.message);
-      fetchData();
-    } catch (err) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
-    }
-  }
+  const filterUsers = () => {
+    if (!searchTerm) return users;
+    return users.filter(user =>
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.target && user.target.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.profile && user.profile.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  };
 
   if (loading) return <div className="container mt-3">Loading...</div>;
   if (error) return <div className="container mt-3 alert alert-danger">Error: {error}</div>;
@@ -219,17 +231,12 @@ function App() {
   return (
     <div className="container mt-3">
       <h1>User Management</h1>
-
       <div className="mb-3">
         <button className="btn btn-primary me-2" onClick={fetchData}>Refresh Data</button>
-        <button
-          className="btn btn-secondary"
-          onClick={() => setUploadVisible(!uploadVisible)}
-        >
+        <button className="btn btn-secondary" onClick={() => setUploadVisible(!uploadVisible)}>
           {uploadVisible ? 'Hide Upload Rates' : 'Show Upload Rates'}
         </button>
       </div>
-
       <div className="mb-3">
         <input
           type="text"
@@ -239,7 +246,6 @@ function App() {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
-
       {filteredUsers.length === 0 ? (
         <div className="alert alert-info">No users found</div>
       ) : (
@@ -275,8 +281,15 @@ function App() {
           </table>
         </div>
       )}
+      <ConfirmationModal
+        show={showModal}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={modalConfig.onCancel}
+      />
     </div>
   );
-}
+};
 
 export default App;
