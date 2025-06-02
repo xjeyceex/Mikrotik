@@ -218,7 +218,7 @@ const App = () => {
       }
     );
   };
-
+console.log('users', users)
   const filterUsers = () => {
     if (!searchTerm) return users;
     return users.filter(user =>
@@ -271,7 +271,7 @@ const App = () => {
             <tbody>
               {filteredUsers.map((user) => (
                 <UserRows
-                  key={`${user.type}-${user.name}`}
+                  key={`${user.type}-${user.name}-${user.target}`}
                   user={user}
                   profiles={profiles}
                   uploadVisible={uploadVisible}
