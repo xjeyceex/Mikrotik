@@ -9,22 +9,21 @@ function UserRows({
   saveQueueRate,
   addExpiredFirewallRule,
   removeExpiredFirewallRule,
-  getUnit
 }) {
   const isPPPoE = user.type === 'pppoe';
   const rowClass = isPPPoE ? 'pppoe-row' : 'queue-row';
-  
+
   const [downloadValue, setDownloadValue] = useState(
     !isPPPoE ? user.download.replace(/[^\d]/g, '') : ''
   );
   const [downloadUnit, setDownloadUnit] = useState(
-    !isPPPoE ? getUnit(user.download) : 'M'
+    !isPPPoE ? 'M' : 'M'  // default to 'M' without getUnit
   );
   const [uploadValue, setUploadValue] = useState(
     !isPPPoE ? user.upload.replace(/[^\d]/g, '') : ''
   );
   const [uploadUnit, setUploadUnit] = useState(
-    !isPPPoE ? getUnit(user.upload) : 'M'
+    !isPPPoE ? 'M' : 'M'  // default to 'M' without getUnit
   );
 
   const handleSaveQueueRate = () => {
@@ -82,7 +81,7 @@ function UserRows({
           '-'
         )}
       </td>
-      
+
       {uploadVisible && (
         <td>
           {!isPPPoE ? (
@@ -110,11 +109,11 @@ function UserRows({
           )}
         </td>
       )}
-      
+
       <td className={user.active ? 'text-success fw-bold' : ''}>
         {user.active ? 'Active' : 'Inactive'}
       </td>
-      
+
       <td>
         <div className="d-flex flex-wrap gap-1">
           {isPPPoE ? (
@@ -125,7 +124,7 @@ function UserRows({
               >
                 Save Profile
               </button>
-              
+
               <button
                 className={`btn btn-sm ${user.profile === 'EXPIRED' ? 'btn-secondary disabled' : 'btn-danger'}`}
                 onClick={() => markPppoeAsExpired(user.name)}
@@ -133,7 +132,7 @@ function UserRows({
               >
                 {user.profile === 'EXPIRED' ? 'Already Expired' : 'Mark as Expired'}
               </button>
-              
+
               {user.profile === 'EXPIRED' && (
                 <button
                   className="btn btn-sm btn-success"
@@ -151,7 +150,7 @@ function UserRows({
               >
                 Save Rates
               </button>
-              
+
               {user.target && user.target !== '-' && (
                 <>
                   <button
@@ -161,7 +160,7 @@ function UserRows({
                   >
                     {user.expired ? 'Already Expired' : 'Mark as Expired'}
                   </button>
-                  
+
                   {user.expired && (
                     <button
                       className="btn btn-sm btn-success"

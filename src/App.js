@@ -35,7 +35,12 @@ const App = () => {
   }, []);
 
   const processExpiredIPs = useCallback((expiredText) => {
-    const expiredIPs = [];
+  if (typeof expiredText !== 'string') {
+    // handle the error, or just return empty array
+    return [];
+  }
+
+  const expiredIPs = [];
     const regex = /\b\d{1,3}(?:\.\d{1,3}){3}(?:-\d{1,3}(?:\.\d{1,3}){3})?|\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/g;
     const matches = expiredText.match(regex) || [];
 
